@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NanoVit Visualizer</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 32px;
+    background: #f5f6f8; color: #222;
+    font-size: 15px;
+  }
+  h1 { margin: 0 0 8px; font-size: 26px; font-weight: 600; }
+  .subtitle { color: #666; margin: 0 0 16px; font-size: 14px; }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 4px;
+    border-bottom: 2px solid #e2e4e8;
+    margin-bottom: 24px;
+  }
+  .tab {
+    padding: 10px 18px; cursor: pointer; font-size: 14px; font-weight: 500;
+    color: #666; background: transparent; border: 0;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+  }
+  .tab:hover { color: #2563eb; }
+  .tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .layout { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+  .controls {
+    flex: 0 0 360px;
+    background: #fff; border: 1px solid #e2e4e8; border-radius: 10px;
+    padding: 24px;
+  }
+  .controls label {
+    display: block; font-size: 14px; font-weight: 500;
+    margin: 16px 0 6px; color: #333;
+  }
+  .controls label:first-of-type { margin-top: 0; }
+  .controls select, .controls input[type=range], .controls input[type=number] {
+    width: 100%; padding: 8px 10px; font-size: 14px;
+    border: 1px solid #d1d5db; border-radius: 6px; background: #fff;
+  }
+  .controls .row { display: flex; gap: 10px; align-items: center; }
+  .controls .row span { font-size: 13px; color: #666; min-width: 40px; text-align: right; }
+  button {
+    margin-top: 24px; width: 100%;
+    padding: 12px; font-size: 15px; font-weight: 500;
+    background: #2563eb; color: #fff; border: 0; border-radius: 6px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #1d4ed8; }
+  button:disabled { background: #9ca3af; cursor: not-allowed; }
+  button.secondary {
+    background: #fff; color: #2563eb; border: 1px solid #2563eb;
+    margin-top: 8px;
+  }
+  button.secondary:hover:not(:disabled) { background: #eff6ff; }
+
+  .upload-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .upload-row input[type=file] { flex: 1; font-size: 13px; }
+
+  .canvas-wrap {
+    flex: 1;
+    background: #fff; border: 1px solid #e2e4e8; border-radius: 10px;
+    padding: 24px; min-width: 360px;
+  }
+  .panels { display: flex; gap: 24px; flex-wrap: wrap; }
+  .panel { display: flex; flex-direction: column; align-items: center; }
+  .panel h2 {
+    font-size: 14px; font-weight: 600; color: #555;
+    margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .stage {
+    position: relative;
+    width: {{ display_size }}px; height: {{ display_size }}px;
+    background: #000; border-radius: 6px; overflow: hidden;
+  }
+  .stage img, .stage canvas {
+    position: absolute; top: 0; left: 0;
+    width: {{ display_size }}px; height: {{ display_size }}px;
+    display: block;
+  }
+
+  .legend {
+    margin-top: 20px; height: 14px; border-radius: 7px;
+    background: linear-gradient(to right,
+      rgba(0,0,255,1), rgba(0,255,0,1),
+      rgba(255,255,0,1), rgba(255,0,0,1));
+    max-width: 600px;
+  }
+  .legend-labels {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: #666;
+    max-width: 600px; margin-top: 4px;
+  }
+  .info {
+    margin-top: 16px; font-size: 13px; color: #555;
+    font-family: ui-monospace, Consolas, monospace; word-break: break-word;
+  }
+  .status { font-size: 12px; color: #888; margin-top: 4px; min-height: 16px; }
+  .show-grid-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .show-grid-row label { margin: 0; font-weight: normal; font-size: 13px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .chip {
+    font-size: 11px; padding: 3px 8px;
+    background: #f3f4f6; color: #444;
+    border: 1px solid #d1d5db; border-radius: 999px;
+    cursor: pointer;
+  }
+  .chip:hover { background: #e5e7eb; }
+
+  /* Probability bar */
+  .probs { width: 100%; margin-top: 12px; }
+  .prob-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; padding: 3px 0;
+  }
+  .prob-name { width: 130px; color: #444; }
+  .prob-bar-wrap { flex: 1; height: 14px; background: #f0f1f4; border-radius: 3px; }
+  .prob-bar { height: 100%; background: #2563eb; border-radius: 3px; }
+  .prob-bar.target { background: #ef4444; }
+  .prob-val { width: 60px; text-align: right; font-family: ui-monospace, Consolas, monospace; color: #555; }
+
+  /* Filter grid */
+  .filter-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 12px;
+  }
+  .filter-cell {
+    display: flex; flex-direction: column; align-items: center;
+    background: #fafbfc; border: 1px solid #eee; border-radius: 6px;
+    padding: 8px;
+  }
+  .filter-cell img {
+    width: 80px; height: 80px;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+    border-radius: 3px;
+  }
+  .filter-cell .lbl { font-size: 11px; color: #888; margin-top: 4px; }
+  .note {
+    background: #fffbe6; border: 1px solid #fde68a; border-radius: 6px;
+    padding: 12px 14px; font-size: 13px; color: #78350f;
+    margin-bottom: 16px; max-width: 760px;
+  }
+</style>
+</head>
+<body>
+
+<h1>NanoVit visualizer</h1>
+<p class="subtitle">Attention maps, Grad-CAM, conv filter inspection, and activation maximization on ImageNet-1k classes.</p>
+
+<div class="tabs">
+  <button class="tab active" data-page="attn">Attention</button>
+  <button class="tab" data-page="gradcam">Grad-CAM</button>
+  <button class="tab" data-page="filters">Conv filters</button>
+  <button class="tab" data-page="actmax">Activation max</button>
+</div>
+
+<!-- =========================================================================
+     SHARED CONFIG (shown across pages where useful)
+     ========================================================================= -->
+
+<!-- =========================================================================
+     PAGE: ATTENTION  (existing functionality)
+     ========================================================================= -->
+<div class="page active" id="page-attn">
+<div class="layout">
+
+  <div class="controls">
+    <label>Model</label>
+    <select id="model">
+      {% for m in models %}
+        <option value="{{ m }}" {% if m == current_model %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+    <div class="status" id="modelStatus"></div>
+
+    <label>Image</label>
+    <select id="image">
+      {% for img in images %}
+        <option value="{{ img.ref }}">{{ img.label }}</option>
+      {% endfor %}
+    </select>
+    <div class="upload-row">
+      <input type="file" id="fileInput" accept=".jpg,.jpeg,.png">
+      <button class="secondary" id="uploadBtn" style="margin-top:0; width:auto; padding:8px 12px;">Upload</button>
+    </div>
+    <div class="status" id="uploadStatus"></div>
+
+    <label>Mode</label>
+    <select id="mode">
+      <option value="query">attention from clicked cell</option>
+      <option value="overall">overall attention received</option>
+    </select>
+
+    <label>Layer</label>
+    <select id="layer"></select>
+
+    <label>Head</label>
+    <select id="head">
+      <option value="mean">mean over heads</option>
+      <option value="0">head 0</option>
+      <option value="1">head 1</option>
+      <option value="2">head 2</option>
+      <option value="3">head 3</option>
+    </select>
+
+    <label>Overlay opacity</label>
+    <div class="row">
+      <input type="range" id="opacity" min="0" max="100" value="60">
+      <span id="opacityVal">60%</span>
+    </div>
+
+    <div class="show-grid-row">
+      <input type="checkbox" id="showGrid">
+      <label for="showGrid">show grid lines</label>
+    </div>
+
+    <button id="go">Compute attention</button>
+  </div>
+
+  <div class="canvas-wrap">
+    <div class="panels">
+      <div class="panel">
+        <h2 id="origHeading">Original — click a cell</h2>
+        <div class="stage" id="stageOrig">
+          <img id="imgOrig" alt="">
+          <canvas id="selectionCanvas" width="{{ display_size }}" height="{{ display_size }}"></canvas>
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="overlayHeading">Attention from selected cell</h2>
+        <div class="stage">
+          <img id="imgOverlay" alt="">
+          <canvas id="overlay" width="{{ display_size }}" height="{{ display_size }}"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="legend"></div>
+    <div class="legend-labels"><span>low attention</span><span>high attention</span></div>
+    <div class="info" id="info">ready</div>
+  </div>
+
+</div>
+</div><!-- /page-attn -->
+
+
+<!-- =========================================================================
+     PAGE: GRAD-CAM
+     ========================================================================= -->
+<div class="page" id="page-gradcam">
+<div class="layout">
+
+  <div class="controls">
+    <label>Image</label>
+    <select id="gcImage">
+      {% for img in images %}
+        <option value="{{ img.ref }}">{{ img.label }}</option>
+      {% endfor %}
+    </select>
+    <div class="status">(uses image dropdown shared with attention page)</div>
+
+    <label>Target class</label>
+    <input type="text" id="gcClassInput" list="classList" placeholder="(predicted class — type to search by name or index)" style="width:100%; padding:8px 10px; font-size:14px; border:1px solid #d1d5db; border-radius:6px;">
+    <datalist id="classList">
+      {% for c in classes %}
+        <option value="{{ c.idx }} — {{ c.name }}"></option>
+      {% endfor %}
+    </datalist>
+    <div class="status" id="gcClassHint">leave empty for predicted class</div>
+    <div class="chips" id="gcChips"></div>
+
+    <label>Overlay opacity</label>
+    <div class="row">
+      <input type="range" id="gcOpacity" min="0" max="100" value="55">
+      <span id="gcOpacityVal">55%</span>
+    </div>
+
+    <button id="gcGo">Compute Grad-CAM</button>
+  </div>
+
+  <div class="canvas-wrap">
+    <div class="panels">
+      <div class="panel">
+        <h2>Original</h2>
+        <div class="stage">
+          <img id="gcImgOrig" alt="">
+        </div>
+      </div>
+      <div class="panel">
+        <h2 id="gcHeading">Grad-CAM</h2>
+        <div class="stage">
+          <img id="gcImgOverlay" alt="">
+          <canvas id="gcOverlay" width="{{ display_size }}" height="{{ display_size }}"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="legend"></div>
+    <div class="legend-labels"><span>low</span><span>high</span></div>
+    <div class="info" id="gcInfo">ready</div>
+    <div class="probs" id="gcProbs"></div>
+  </div>
+
+</div>
+</div><!-- /page-gradcam -->
+
+
+<!-- =========================================================================
+     PAGE: CONV FILTERS
+     ========================================================================= -->
+<div class="page" id="page-filters">
+<div class="layout">
+
+  <div class="controls">
+    <button id="cfGo" style="margin-top:0;">Load stem filters</button>
+    <div class="status" id="cfStatus" style="margin-top:8px;"></div>
+    <p style="font-size:12px; color:#666; margin-top:16px;">
+      Reloads from the currently-loaded model. Switch models on the Attention tab.
+    </p>
+  </div>
+
+  <div class="canvas-wrap">
+    <div class="note" id="cfNote" style="display:none;"></div>
+    <div class="filter-grid" id="cfGrid"></div>
+  </div>
+
+</div>
+</div><!-- /page-filters -->
+
+
+<!-- =========================================================================
+     PAGE: ACTIVATION MAXIMIZATION
+     ========================================================================= -->
+<div class="page" id="page-actmax">
+<div class="layout">
+
+  <div class="controls">
+    <label>Target class</label>
+    <input type="text" id="amClassInput" list="classList" placeholder="type a class name or index (e.g. 'tench' or 0)" style="width:100%; padding:8px 10px; font-size:14px; border:1px solid #d1d5db; border-radius:6px;">
+    <div class="status" id="amClassHint">try the 10 Imagenette classes (highlighted) for fastest sanity check</div>
+    <div class="chips" id="amChips"></div>
+
+    <label>Steps</label>
+    <input type="number" id="amSteps" min="32" max="2048" step="32" value="256">
+
+    <label>Learning rate</label>
+    <input type="number" id="amLr" min="0.001" max="1" step="0.005" value="0.05">
+
+    <label>TV regularization</label>
+    <input type="number" id="amTv" min="0" max="0.01" step="0.0001" value="0.0001">
+
+    <label>Random seed</label>
+    <input type="number" id="amSeed" value="0">
+
+    <button id="amGo">Run optimization</button>
+    <div class="status" id="amStatus"></div>
+  </div>
+
+  <div class="canvas-wrap">
+    <div class="panel" style="margin-bottom:16px;">
+      <h2 id="amHeading">Optimized image</h2>
+      <div class="stage">
+        <img id="amImg" alt="">
+      </div>
+    </div>
+    <div class="info" id="amInfo">ready</div>
+  </div>
+
+</div>
+</div><!-- /page-actmax -->
+
+
+<script>
+// =================== TAB SWITCHING ===================
+const tabs = document.querySelectorAll(".tab");
+tabs.forEach(t => t.addEventListener("click", () => {
+  tabs.forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.getElementById("page-" + t.dataset.page).classList.add("active");
+}));
+
+
+// =================== SHARED ===================
+const initialLayers = {{ layers | tojson }};
+const NUM_CLASSES = {{ num_classes }};
+const IMAGENETTE_INDICES = {{ imagenette_indices | tojson }};
+const CLASS_NAMES = {{ classes | tojson }};   // [{idx, name}, ...]
+
+/** Parse "<idx> — <name>" or "<idx>" or "<name>". Returns int or -1 if empty/invalid. */
+function parseClassInput(value) {
+  const v = (value || "").trim();
+  if (!v) return -1;
+  // try leading integer
+  const m = v.match(/^(\d+)/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n >= 0 && n < NUM_CLASSES) return n;
+  }
+  // exact name match
+  const lower = v.toLowerCase();
+  for (const c of CLASS_NAMES) {
+    if (c.name.toLowerCase() === lower) return c.idx;
+  }
+  // partial substring fallback
+  for (const c of CLASS_NAMES) {
+    if (c.name.toLowerCase().includes(lower)) return c.idx;
+  }
+  return -1;
+}
+
+function renderImagenetteChips(container, inputEl) {
+  container.innerHTML = "";
+  for (const idx of IMAGENETTE_INDICES) {
+    const c = CLASS_NAMES[idx];
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = c.name;
+    chip.title = `class ${idx}`;
+    chip.addEventListener("click", () => {
+      inputEl.value = `${idx} — ${c.name}`;
+    });
+    container.appendChild(chip);
+  }
+}
+
+function colormap(v) {
+  v = Math.max(0, Math.min(1, v));
+  let r, g, b;
+  if (v < 0.25)      { r = 0;                          g = Math.round(v*4*255);            b = 255; }
+  else if (v < 0.5)  { r = 0;                          g = 255;                            b = Math.round((1-(v-0.25)*4)*255); }
+  else if (v < 0.75) { r = Math.round((v-0.5)*4*255);  g = 255;                            b = 0; }
+  else               { r = 255;                        g = Math.round((1-(v-0.75)*4)*255); b = 0; }
+  return [r, g, b];
+}
+
+// keep image dropdowns in sync
+const imageSel    = document.getElementById("image");
+const gcImageSel  = document.getElementById("gcImage");
+function syncImageDropdowns(images, selectedRef) {
+  const fill = (el) => {
+    el.innerHTML = "";
+    for (const img of images) {
+      const o = document.createElement("option");
+      o.value = img.ref;
+      o.textContent = img.label;
+      el.appendChild(o);
+    }
+    if (selectedRef) el.value = selectedRef;
+  };
+  fill(imageSel);
+  fill(gcImageSel);
+}
+
+
+// =================== ATTENTION PAGE ===================
+const imgOrig    = document.getElementById("imgOrig");
+const imgOverlay = document.getElementById("imgOverlay");
+const overlay    = document.getElementById("overlay");
+const selCanvas  = document.getElementById("selectionCanvas");
+const stageOrig  = document.getElementById("stageOrig");
+const ctx        = overlay.getContext("2d");
+const selCtx     = selCanvas.getContext("2d");
+
+const opacityEl   = document.getElementById("opacity");
+const opacityVal  = document.getElementById("opacityVal");
+const infoEl      = document.getElementById("info");
+const goBtn       = document.getElementById("go");
+const layerSel    = document.getElementById("layer");
+const modelSel    = document.getElementById("model");
+const fileInput   = document.getElementById("fileInput");
+const uploadBtn   = document.getElementById("uploadBtn");
+const modelStatus = document.getElementById("modelStatus");
+const uploadStatus= document.getElementById("uploadStatus");
+const showGridEl  = document.getElementById("showGrid");
+const modeSel     = document.getElementById("mode");
+const origHeading = document.getElementById("origHeading");
+const overlayHeading = document.getElementById("overlayHeading");
+
+let lastResult = null;
+let selectedCell = null;
+
+opacityEl.addEventListener("input", () => {
+  opacityVal.textContent = opacityEl.value + "%";
+  if (lastResult && (selectedCell || modeSel.value === "overall")) drawOverlay();
+});
+showGridEl.addEventListener("change", () => {
+  if (lastResult) { drawSelection(); drawOverlay(); }
+});
+
+function applyModeUI() {
+  if (modeSel.value === "overall") {
+    origHeading.textContent = "Original";
+    overlayHeading.textContent = "Overall attention received";
+    stageOrig.style.cursor = "default";
+  } else {
+    origHeading.textContent = "Original — click a cell";
+    overlayHeading.textContent = "Attention from selected cell";
+    stageOrig.style.cursor = "crosshair";
+  }
+}
+applyModeUI();
+modeSel.addEventListener("change", () => {
+  applyModeUI();
+  if (lastResult) { drawSelection(); drawOverlay(); }
+});
+
+function populateLayers(layers) {
+  layerSel.innerHTML = "";
+  for (const li of layers) {
+    const o = document.createElement("option");
+    o.value = `${li.stage}:${li.layer}`;
+    o.textContent = `stage ${li.stage} · layer ${li.layer} · ${li.feat_size}×${li.feat_size}`;
+    layerSel.appendChild(o);
+  }
+}
+populateLayers(initialLayers);
+
+modelSel.addEventListener("change", async () => {
+  const name = modelSel.value;
+  modelStatus.textContent = `loading ${name} ...`;
+  goBtn.disabled = true;
+  try {
+    const r = await fetch("/api/switch_model", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await r.json();
+    if (!data.ok) { modelStatus.textContent = "error: " + data.error; return; }
+    populateLayers(data.layers);
+    modelStatus.textContent = `using ${data.current_model}`;
+    compute();
+  } catch (e) {
+    modelStatus.textContent = "request failed: " + e;
+  } finally {
+    goBtn.disabled = false;
+  }
+});
+
+uploadBtn.addEventListener("click", async () => {
+  const file = fileInput.files[0];
+  if (!file) { uploadStatus.textContent = "pick a file first"; return; }
+  uploadStatus.textContent = "uploading…";
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch("/api/upload", { method: "POST", body: fd });
+    const data = await r.json();
+    if (!data.ok) { uploadStatus.textContent = "error: " + data.error; return; }
+    syncImageDropdowns(data.images, data.ref);
+    uploadStatus.textContent = "uploaded ✓";
+    fileInput.value = "";
+    compute();
+  } catch (e) {
+    uploadStatus.textContent = "request failed: " + e;
+  }
+});
+
+function drawSelection() {
+  const W = selCanvas.width, H = selCanvas.height;
+  selCtx.clearRect(0, 0, W, H);
+  if (!lastResult) return;
+  const { feat_size } = lastResult;
+  const cw = W / feat_size, ch = H / feat_size;
+  if (showGridEl.checked) {
+    selCtx.strokeStyle = "rgba(255,255,255,0.18)";
+    selCtx.lineWidth = 1;
+    for (let i = 1; i < feat_size; i++) {
+      selCtx.beginPath(); selCtx.moveTo(Math.round(i*cw)+0.5, 0); selCtx.lineTo(Math.round(i*cw)+0.5, H); selCtx.stroke();
+      selCtx.beginPath(); selCtx.moveTo(0, Math.round(i*ch)+0.5); selCtx.lineTo(W, Math.round(i*ch)+0.5); selCtx.stroke();
+    }
+  }
+  if (modeSel.value !== "query" || !selectedCell) return;
+  const { fy, fx } = selectedCell;
+  selCtx.strokeStyle = "rgba(255,255,255,0.95)"; selCtx.lineWidth = 3;
+  selCtx.strokeRect(fx*cw, fy*ch, cw, ch);
+  selCtx.strokeStyle = "rgba(0,0,0,0.9)"; selCtx.lineWidth = 1;
+  selCtx.strokeRect(fx*cw+1.5, fy*ch+1.5, cw-3, ch-3);
+}
+
+function buildAttentionField() {
+  const { matrices, grid_h, grid_w, feat_size, patch_size } = lastResult;
+  const ph = patch_size, F = feat_size;
+  const values = new Float32Array(F * F);
+  let infoSuffix = "";
+
+  if (modeSel.value === "query") {
+    if (!selectedCell) return null;
+    const { fy, fx } = selectedCell;
+    const ny = Math.floor(fy / ph), nx = Math.floor(fx / ph);
+    const py = fy % ph, px = fx % ph;
+    const p_query = py * ph + px;
+    const n_query = ny * grid_w + nx;
+    const queryRow = matrices[p_query][n_query];
+    for (let nyp = 0; nyp < grid_h; nyp++) {
+      for (let nxp = 0; nxp < grid_w; nxp++) {
+        const v = queryRow[nyp * grid_w + nxp];
+        for (let dy = 0; dy < ph; dy++) {
+          for (let dx = 0; dx < ph; dx++) {
+            values[(nyp*ph + dy) * F + (nxp*ph + dx)] = v;
+          }
+        }
+      }
+    }
+    infoSuffix = `query cell (${fx},${fy}) · token (${nx},${ny}) · patch-pos ${p_query} · self-attn = ${queryRow[n_query].toExponential(2)}`;
+  } else {
+    const P = matrices.length, N = grid_h * grid_w;
+    for (let p = 0; p < P; p++) {
+      const py = Math.floor(p / ph), px = p % ph;
+      const M = matrices[p];
+      for (let n = 0; n < N; n++) {
+        let s = 0;
+        for (let q = 0; q < N; q++) s += M[q][n];
+        const avg = s / N;
+        const ny = Math.floor(n / grid_w), nx = n % grid_w;
+        values[(ny*ph + py) * F + (nx*ph + px)] = avg;
+      }
+    }
+    infoSuffix = `overall attention received · ${F}×${F} cells`;
+  }
+  return { values, infoSuffix };
+}
+
+function drawOverlay() {
+  if (!lastResult) { ctx.clearRect(0, 0, overlay.width, overlay.height); return; }
+  const field = buildAttentionField();
+  if (!field) { ctx.clearRect(0, 0, overlay.width, overlay.height); return; }
+  const { values, infoSuffix } = field;
+  const F = lastResult.feat_size;
+
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < values.length; i++) { const v = values[i]; if (v<mn)mn=v; if (v>mx)mx=v; }
+  const span = (mx - mn) > 1e-12 ? (mx - mn) : 1;
+
+  const W = overlay.width, H = overlay.height;
+  const cw = W / F, ch = H / F;
+  const alpha = parseInt(opacityEl.value, 10) / 100;
+
+  const off = document.createElement("canvas");
+  off.width = F; off.height = F;
+  const octx = off.getContext("2d");
+  const imgData = octx.createImageData(F, F);
+  for (let i = 0; i < values.length; i++) {
+    const v = (values[i] - mn) / span;
+    const [r,g,b] = colormap(v);
+    const o = i * 4;
+    imgData.data[o]=r; imgData.data[o+1]=g; imgData.data[o+2]=b; imgData.data[o+3]=Math.round(alpha*255);
+  }
+  octx.putImageData(imgData, 0, 0);
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(off, 0, 0, W, H);
+
+  if (showGridEl.checked) {
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i < F; i++) {
+      ctx.beginPath(); ctx.moveTo(Math.round(i*cw)+0.5, 0); ctx.lineTo(Math.round(i*cw)+0.5, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, Math.round(i*ch)+0.5); ctx.lineTo(W, Math.round(i*ch)+0.5); ctx.stroke();
+    }
+  }
+
+  if (modeSel.value === "query" && selectedCell) {
+    const { fy, fx } = selectedCell;
+    ctx.strokeStyle = "rgba(255,255,255,0.95)"; ctx.lineWidth = 3;
+    ctx.strokeRect(fx*cw, fy*ch, cw, ch);
+    ctx.strokeStyle = "rgba(0,0,0,0.9)"; ctx.lineWidth = 1;
+    ctx.strokeRect(fx*cw+1.5, fy*ch+1.5, cw-3, ch-3);
+  }
+
+  infoEl.textContent =
+    `model ${lastResult.model} · ${F}×${F} · pred class idx ${lastResult.pred_idx} · ` +
+    `range [${mn.toExponential(2)}, ${mx.toExponential(2)}] · ` + infoSuffix;
+}
+
+stageOrig.addEventListener("click", (ev) => {
+  if (!lastResult || modeSel.value !== "query") return;
+  const rect = stageOrig.getBoundingClientRect();
+  const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+  const F = lastResult.feat_size;
+  const fx = Math.max(0, Math.min(F-1, Math.floor(x/(rect.width/F))));
+  const fy = Math.max(0, Math.min(F-1, Math.floor(y/(rect.height/F))));
+  selectedCell = { fy, fx };
+  drawSelection(); drawOverlay();
+});
+
+async function compute() {
+  if (!imageSel.value) { infoEl.textContent = "no image selected"; return; }
+  goBtn.disabled = true;
+  infoEl.textContent = "computing…";
+  const image = imageSel.value;
+  const [stage, layer] = layerSel.value.split(":");
+  const head = document.getElementById("head").value;
+  try {
+    const r = await fetch("/api/attention", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image, stage, layer, head }),
+    });
+    const data = await r.json();
+    if (!data.ok) { infoEl.textContent = "error: " + data.error; return; }
+    lastResult = data;
+    const src = "data:image/png;base64," + data.image_b64;
+    imgOrig.src = src; imgOverlay.src = src;
+    selectedCell = { fy: Math.floor(data.feat_size/2), fx: Math.floor(data.feat_size/2) };
+    drawSelection(); drawOverlay();
+  } catch (e) {
+    infoEl.textContent = "request failed: " + e;
+  } finally {
+    goBtn.disabled = false;
+  }
+}
+goBtn.addEventListener("click", compute);
+
+
+// =================== GRAD-CAM PAGE ===================
+const gcImgOrig    = document.getElementById("gcImgOrig");
+const gcImgOverlay = document.getElementById("gcImgOverlay");
+const gcOverlay    = document.getElementById("gcOverlay");
+const gcCtx        = gcOverlay.getContext("2d");
+const gcOpacityEl  = document.getElementById("gcOpacity");
+const gcOpacityVal = document.getElementById("gcOpacityVal");
+const gcGo         = document.getElementById("gcGo");
+const gcInfo       = document.getElementById("gcInfo");
+const gcProbs      = document.getElementById("gcProbs");
+const gcHeading    = document.getElementById("gcHeading");
+
+let gcLastResult = null;
+gcOpacityEl.addEventListener("input", () => {
+  gcOpacityVal.textContent = gcOpacityEl.value + "%";
+  if (gcLastResult) drawGradCam();
+});
+
+function drawGradCam() {
+  if (!gcLastResult) { gcCtx.clearRect(0, 0, gcOverlay.width, gcOverlay.height); return; }
+  const { cam, h, w } = gcLastResult;
+  const W = gcOverlay.width, H = gcOverlay.height;
+  const alpha = parseInt(gcOpacityEl.value, 10) / 100;
+  const off = document.createElement("canvas");
+  off.width = w; off.height = h;
+  const octx = off.getContext("2d");
+  const imgData = octx.createImageData(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const v = cam[y][x];
+      const [r,g,b] = colormap(v);
+      const i = (y*w + x)*4;
+      imgData.data[i]=r; imgData.data[i+1]=g; imgData.data[i+2]=b; imgData.data[i+3]=Math.round(alpha*255);
+    }
+  }
+  octx.putImageData(imgData, 0, 0);
+  gcCtx.clearRect(0, 0, W, H);
+  gcCtx.imageSmoothingEnabled = true;
+  gcCtx.imageSmoothingQuality = "high";
+  gcCtx.drawImage(off, 0, 0, W, H);
+}
+
+function renderProbs(top, targetIdx) {
+  gcProbs.innerHTML = "";
+  const max = top.length ? top[0].prob : 1;
+  for (const p of top) {
+    const row = document.createElement("div");
+    row.className = "prob-row";
+    const isTarget = (p.idx === targetIdx);
+    row.innerHTML = `
+      <div class="prob-name">${p.idx} — ${p.name}</div>
+      <div class="prob-bar-wrap"><div class="prob-bar ${isTarget?'target':''}" style="width:${(p.prob*100).toFixed(1)}%"></div></div>
+      <div class="prob-val">${(p.prob*100).toFixed(2)}%</div>
+    `;
+    gcProbs.appendChild(row);
+  }
+}
+
+gcGo.addEventListener("click", async () => {
+  gcGo.disabled = true;
+  gcInfo.textContent = "computing…";
+  const image = gcImageSel.value;
+  const target_class = parseClassInput(document.getElementById("gcClassInput").value);
+  try {
+    const r = await fetch("/api/gradcam", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image, target_class }),
+    });
+    const data = await r.json();
+    if (!data.ok) { gcInfo.textContent = "error: " + data.error; return; }
+    gcLastResult = data;
+    const src = "data:image/png;base64," + data.image_b64;
+    gcImgOrig.src = src; gcImgOverlay.src = src;
+    gcHeading.textContent = `Grad-CAM — class ${data.target_class} (${data.target_class_name})`;
+    drawGradCam();
+    renderProbs(data.top, data.target_class);
+    gcInfo.textContent = `target class ${data.target_class} (${data.target_class_name}) · CAM ${data.h}×${data.w}`;
+  } catch (e) {
+    gcInfo.textContent = "request failed: " + e;
+  } finally {
+    gcGo.disabled = false;
+  }
+});
+
+
+// =================== CONV FILTERS PAGE ===================
+const cfGo = document.getElementById("cfGo");
+const cfGrid = document.getElementById("cfGrid");
+const cfNote = document.getElementById("cfNote");
+const cfStatus = document.getElementById("cfStatus");
+
+cfGo.addEventListener("click", async () => {
+  cfGo.disabled = true;
+  cfStatus.textContent = "loading…";
+  try {
+    const r = await fetch("/api/conv_filters", { method: "POST" });
+    const data = await r.json();
+    if (!data.ok) { cfStatus.textContent = "error: " + data.error; return; }
+    cfNote.style.display = "block";
+    cfNote.textContent = data.info;
+    cfGrid.innerHTML = "";
+    for (const f of data.filters) {
+      const cell = document.createElement("div");
+      cell.className = "filter-cell";
+      cell.innerHTML = `
+        <img src="data:image/png;base64,${f.image_b64}" alt="filter ${f.idx}">
+        <div class="lbl">#${f.idx} · [${f.min.toFixed(2)}, ${f.max.toFixed(2)}]</div>
+      `;
+      cfGrid.appendChild(cell);
+    }
+    cfStatus.textContent = `${data.filters.length} filters loaded`;
+  } catch (e) {
+    cfStatus.textContent = "request failed: " + e;
+  } finally {
+    cfGo.disabled = false;
+  }
+});
+
+
+// =================== ACTIVATION MAX PAGE ===================
+const amGo = document.getElementById("amGo");
+const amImg = document.getElementById("amImg");
+const amInfo = document.getElementById("amInfo");
+const amStatus = document.getElementById("amStatus");
+const amHeading = document.getElementById("amHeading");
+
+amGo.addEventListener("click", async () => {
+  amGo.disabled = true;
+  amStatus.textContent = "running… (this can take 10–60 seconds depending on steps & device)";
+  amInfo.textContent = "optimizing…";
+  const target_class = parseClassInput(document.getElementById("amClassInput").value);
+  if (target_class < 0) {
+    amInfo.textContent = "please enter a valid class (name or index)";
+    amStatus.textContent = "";
+    amGo.disabled = false;
+    return;
+  }
+  const steps = parseInt(document.getElementById("amSteps").value, 10);
+  const lr = parseFloat(document.getElementById("amLr").value);
+  const tv_weight = parseFloat(document.getElementById("amTv").value);
+  const seed = parseInt(document.getElementById("amSeed").value, 10);
+  try {
+    const r = await fetch("/api/activation_max", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_class, steps, lr, tv_weight, seed }),
+    });
+    const data = await r.json();
+    if (!data.ok) { amInfo.textContent = "error: " + data.error; amStatus.textContent = ""; return; }
+    amImg.src = "data:image/png;base64," + data.image_b64;
+    amHeading.textContent = `Optimized image — class ${data.target_class} (${data.target_class_name})`;
+    amInfo.textContent =
+      `class ${data.target_class} (${data.target_class_name}) · ` +
+      `final logit = ${data.final_logit.toFixed(3)} · ` +
+      `final softmax prob = ${(data.final_prob*100).toFixed(2)}%`;
+    amStatus.textContent = "done ✓";
+  } catch (e) {
+    amInfo.textContent = "request failed: " + e;
+    amStatus.textContent = "";
+  } finally {
+    amGo.disabled = false;
+  }
+});
+
+
+// =================== INIT ===================
+window.addEventListener("DOMContentLoaded", () => {
+  renderImagenetteChips(document.getElementById("gcChips"),
+                        document.getElementById("gcClassInput"));
+  renderImagenetteChips(document.getElementById("amChips"),
+                        document.getElementById("amClassInput"));
+  compute();
+});
+</script>
+</body>
+</html>
